@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kontrol Servo & Sensor pH</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #1a2a6c, #b21f1f);
+      color: white;
+      padding: 20px;
+    }
+    .container {
+      max-width: 800px; margin: 0 auto;
+      background: rgba(0,0,0,0.4); border-radius: 16px;
+      padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+    header {
+      text-align: center; margin-bottom: 30px;
+    }
+    h1 { font-size: 2rem; margin-bottom: 5px; }
+    .subtitle { color: #ddd; margin-bottom: 20px; }
+
+    .card {
+      background: rgba(255,255,255,0.08); border-radius: 12px;
+      padding: 20px; margin-bottom: 25px;
+    }
+    .card h2 {
+      margin-bottom: 15px; font-size: 1.4rem;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .status-box {
+      font-size: 2.5rem; font-weight: bold;
+      padding: 20px; text-align: center;
+      background: #2c3e50; border-radius: 12px;
+      margin: 15px 0;
+      transition: all 0.3s;
+    }
+    .status-on { background: #27ae60; }
+    .status-off { background: #e74c3c; }
+    .status-ph { background: #3498db; }
+
+    .btn-group {
+      display: flex; gap: 15px; justify-content: center;
+    }
+    .btn {
+      padding: 14px 30px; font-size: 1.2rem; border: none;
+      border-radius: 8px; cursor: pointer;
+      transition: all 0.2s; flex: 1;
+    }
+    .btn-on { background: #2ecc71; color: white; }
+    .btn-off { background: #e74c3c; color: white; }
+    .btn:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+
+    .log {
+      background: rgba(0,0,0,0.3); padding: 15px;
+      border-radius: 8px; max-height: 200px; overflow-y: auto;
+      font-family: monospace; font-size: 0.95rem;
+    }
+    .log div { margin: 5px 0; }
+    .success { color: #2ecc71; }
+    .error { color: #e74c3c; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🤖 Kontrol Servo & Sensor pH</h1>
+      <p class="subtitle">KKN Rekognisi ITERA 2025</p>
+    </header>
+
+    <!-- Kontrol Servo -->
+    <div class="card">
+      <h2>⚙️ Kontrol Servo</h2>
+      <div id="servoStatus" class="status-box status-off">Servo: OFF</div>
+      <div class="btn-group">
+        <button class="btn btn-on" onclick="controlServo('ON')">✅ ON (0°)</button>
+        <button class="btn btn-off" onclick="controlServo('OFF')">❌ OFF (90°)</button>
+      </div>
+    </div>
+
+    <!-- Data pH -->
+    <div class="card">
+      <h2>🧪 Data pH Terakhir</h2>
+      <div id="phStatus" class="status-box status-ph">pH: —</div>
+      <p style="text-align: center; font-size: 0.9rem; color: #bbb;">Data diambil dari database</p>
+    </div>
+
+    <!-- Log -->
+    <div class="card">
+      <h2>📋 Log Aktivitas</h2>
+      <div class="log" id="log">
+        <div>🚀 Sistem dimulai...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const servoStatusEl = document.getElementById('servoStatus');
+    const phStatusEl = document.getElementById('phStatus');
+
+    function log(msg, type = '') {
+      const div = document.createElement('div');
+      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      if (type) div.className = type;
+      logEl.appendChild(div);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    // Fetch data pH setiap 5 detik
+    async function fetchPh() {
+      try {
+        const res = await fetch('/ph');
+        const data = await res.json();
+        if (data.success) {
+          phStatusEl.textContent = `pH: ${data.ph}`;
+          log(`✅ Data pH: ${data.ph} (diambil dari DB)`, 'success');
+        } else {
+          phStatusEl.textContent = `pH: —`;
+          log(`ℹ️ ${data.message}`, '');
+        }
+      } catch (err) {
+        log(`❌ Gagal ambil data pH: ${err.message}`, 'error');
+      }
+    }
+
+    // Kontrol servo
+    async function controlServo(cmd) {
+      try {
+        const res = await fetch('/servo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: cmd })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          log(`✅ Perintah ${cmd} berhasil dikirim`, 'success');
+          // Update status sementara (akan diupdate oleh ESP via MQTT jika pakai WebSocket)
+          servoStatusEl.textContent = `Servo: ${cmd}`;
+          servoStatusEl.className = `status-box ${cmd === 'ON' ? 'status-on' : 'status-off'}`;
+        } else {
+          log(`❌ Gagal: ${data.message}`, 'error');
+        }
+      } catch (err) {
+        log(`❌ Error jaringan: ${err.message}`, 'error');
+      }
+    }
+
+    // Mulai
+    setInterval(fetchPh, 5000);
+    fetchPh();
+  </script>
+</body>
+</html>
