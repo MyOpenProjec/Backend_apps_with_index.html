@@ -62,6 +62,12 @@
     .log div { margin: 5px 0; }
     .success { color: #2ecc71; }
     .error { color: #e74c3c; }
+
+    input[type=time] {
+      width: 100%; padding: 10px;
+      font-size: 1.1rem; border-radius: 8px; border: none;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -81,6 +87,40 @@
       </div>
     </div>
 
+    <!-- Countdown Timer -->
+    <div style="margin-top: 25px; text-align: center;">
+  <h3 style="margin-bottom: 10px;">⏳ Countdown:</h3>
+  <div id="countdownBox"
+    style="
+      font-size: 2.5rem;
+      font-weight: bold;
+      background: #222;
+      padding: 20px;
+      border-radius: 12px;
+      display: inline-block;
+      min-width: 200px;
+      transition: 0.3s;">
+    00:00:00
+  </div>
+</div>
+
+    <!-- Jadwal Servo Otomatis -->
+    <div class="card">
+      <h2>⏱ Jadwal Servo Otomatis</h2>
+
+      <label>Atur Waktu Buka Servo</label>
+      <div style="display:flex; gap:10px;">
+        <input type="number" id="h" placeholder="Jam" min="0" max="23" style="flex:1; padding:10px;">
+        <input type="number" id="m" placeholder="Menit" min="0" max="59" style="flex:1; padding:10px;">
+        <input type="number" id="s" placeholder="Detik" min="0" max="59" style="flex:1; padding:10px;">
+      </div>
+
+      <div class="btn-group" style="margin-top: 15px;">
+        <button class="btn btn-on" onclick="setSchedule()">Set Jadwal</button>
+        <button class="btn btn-off" onclick="resetSchedule()">Reset Jadwal</button>
+      </div>
+
+
     <!-- Data pH -->
     <div class="card">
       <h2>🧪 Data pH Terakhir</h2>
@@ -97,62 +137,124 @@
     </div>
   </div>
 
-  <script>
-    const logEl = document.getElementById('log');
-    const servoStatusEl = document.getElementById('servoStatus');
-    const phStatusEl = document.getElementById('phStatus');
+<script>
+  const logEl = document.getElementById('log');
+  const servoStatusEl = document.getElementById('servoStatus');
+  const phStatusEl = document.getElementById('phStatus');
 
-    function log(msg, type = '') {
-      const div = document.createElement('div');
-      div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-      if (type) div.className = type;
-      logEl.appendChild(div);
-      logEl.scrollTop = logEl.scrollHeight;
-    }
+  function log(msg, type = '') {
+    const div = document.createElement('div');
+    div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    if (type) div.className = type;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
 
-    // Fetch data pH setiap 5 detik
-    async function fetchPh() {
-      try {
-        const res = await fetch('/ph');
-        const data = await res.json();
-        if (data.success) {
-          phStatusEl.textContent = `pH: ${data.ph}`;
-          log(`✅ Data pH: ${data.ph} (diambil dari DB)`, 'success');
-        } else {
-          phStatusEl.textContent = `pH: —`;
-          log(`ℹ️ ${data.message}`, '');
-        }
-      } catch (err) {
-        log(`❌ Gagal ambil data pH: ${err.message}`, 'error');
+  async function fetchPh() {
+    try {
+      const res = await fetch('/ph');
+      const data = await res.json();
+      if (data.success) {
+        phStatusEl.textContent = `pH: ${data.ph}`;
+        log(`✅ Data pH: ${data.ph}`, "success");
       }
+    } catch (err) {
+      log(`❌ Gagal ambil data pH: ${err.message}`, "error");
     }
+  }
 
-    // Kontrol servo
-    async function controlServo(cmd) {
-      try {
-        const res = await fetch('/servo', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: cmd })
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-          log(`✅ Perintah ${cmd} berhasil dikirim`, 'success');
-          // Update status sementara (akan diupdate oleh ESP via MQTT jika pakai WebSocket)
-          servoStatusEl.textContent = `Servo: ${cmd}`;
-          servoStatusEl.className = `status-box ${cmd === 'ON' ? 'status-on' : 'status-off'}`;
-        } else {
-          log(`❌ Gagal: ${data.message}`, 'error');
-        }
-      } catch (err) {
-        log(`❌ Error jaringan: ${err.message}`, 'error');
+  async function controlServo(cmd) {
+    try {
+      const r = await fetch('/servo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: cmd })
+      });
+
+      const d = await r.json();
+
+      if (d.success) {
+        servoStatusEl.textContent = `Servo: ${cmd}`;
+        servoStatusEl.className = `status-box ${cmd === "ON" ? "status-on" : "status-off"}`;
+        log(`Servo ${cmd}`, "success");
       }
+    } catch (err) {
+      log(`❌ Error jaringan: ${err.message}`, "error");
+    }
+  }
+
+  async function setSchedule() {
+    const h = Number(document.getElementById('h').value) || 0;
+    const m = Number(document.getElementById('m').value) || 0;
+    const s = Number(document.getElementById('s').value) || 0;
+
+    const totalSeconds = h * 3600 + m * 60 + s;
+
+    if (totalSeconds < 5) {
+      log("❌ Minimal 5 detik", "error");
+      return;
     }
 
-    // Mulai
-    setInterval(fetchPh, 5000);
-    fetchPh();
-  </script>
+    const r = await fetch('/servo/schedule', {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ seconds: totalSeconds })
+    });
+
+    const d = await r.json();
+
+    if (d.success) {
+      log(`⏱ Jadwal dimulai setiap ${totalSeconds} detik`, "success");
+    }
+  }
+
+  // ======================
+  //   RESET SCHEDULE
+  // ======================
+  async function resetSchedule() {
+    const r = await fetch('/servo/schedule/reset', { method: "POST" });
+    const d = await r.json();
+
+    if (d.success) {
+      countdownBox.textContent = "00:00:00";
+      countdownBox.style.background = "#222";
+      log("🔁 Jadwal servo direset", "success");
+    }
+  }
+
+  // ======================
+  //   UPDATE COUNTDOWN
+  // ======================
+  async function updateCountdown() {
+    const r = await fetch('/servo/countdown');
+    const d = await r.json();
+
+    if (!d.success) return;
+
+    const sec = d.countdown;
+
+    if (sec <= 0) {
+      countdownBox.textContent = "00:00:00";
+      countdownBox.style.background = "#8e44ad"; // ungu
+      return;
+    }
+
+    const hh = String(Math.floor(sec / 3600)).padStart(2, '0');
+    const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+    const ss = String(sec % 60).padStart(2, '0');
+
+    countdownBox.textContent = `${hh}:${mm}:${ss}`;
+
+    // Warna berubah jika hampir habis
+    if (sec <= 10) countdownBox.style.background = "#e74c3c";
+    else countdownBox.style.background = "#222";
+  }
+
+  setInterval(updateCountdown, 1000);
+  updateCountdown();
+  fetchPh();
+  fetchSchedule();
+</script>
+
 </body>
 </html>
