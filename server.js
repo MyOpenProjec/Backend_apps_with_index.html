@@ -4,7 +4,7 @@ const mqtt = require('mqtt');
 const mysql = require('mysql2');
 const app = express();
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 4000;
 
 app.use(express.static('public'));
 app.use(express.json());
@@ -24,6 +24,7 @@ app.use((req, res, next) => {
 // =======================
 const db = mysql.createPool({
   host: process.env.DB_HOST,
+  port: process.env.DB_PORT,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
